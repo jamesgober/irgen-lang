@@ -3,7 +3,7 @@
 # =============================================================================
 [package]
 name    = "irgen-lang"
-version = "0.1.0"
+version = "0.2.0"
 
 # Minimum Supported Rust Version (MSRV)
 rust-version = "1.85"
@@ -16,7 +16,7 @@ license = "Apache-2.0 OR MIT"
 readme = "README.md"
 
 # Description
-description = "Lowers HIR to ir-lang SSA for native compilation: monomorphization, closure conversion, decision trees, exception edges, and GC statepoints."
+description = "Lowers HIR to ir-lang SSA for native compilation: functions, SSA locals, control flow, records and arrays in memory, OPS operations with their policies, exception edges, and GC statepoints."
 
 # Keywords (5 max)
 keywords = ["compiler", "ssa", "lowering", "hir", "lexersketch"]
@@ -45,18 +45,32 @@ path = "src/lib.rs"
 # #################################
 [features]
 default = ["std"]
-std = []
+std = ["hir-lang/std", "ir-lang/std", "typeck-lang/std", "intern-lang/std"]
 
 
 # DEPENDENCIES
 # #################################
 [dependencies]
-# First-party -lang dependencies are wired at v0.2.0, when first used.
+# HIR, the input: the unit, its arenas, binders, ops and policies (spec v3).
+hir-lang    = { version = "0.4", default-features = false }
+# ir-lang 2.0, the output: SSA builder, SSA construction, statepoint insertion, validator.
+# Pre-release, so pinned exactly (a later alpha may change the surface).
+ir-lang     = { version = "=2.0.0-alpha.2", default-features = false }
+# Types of every expression and binder (typeck-lang's side table).
+typeck-lang = { version = "0.3", default-features = false }
+# Symbol text for function and global names, through the interner's read
+# contract `Lookup`; the major version hir-lang and typeck-lang use.
+intern-lang = { version = "1", default-features = false }
 
 
 # DEV DEPENDENCIES
 # #################################
 [dev-dependencies]
+# The reference interpreter (the oracle for differential tests).
+ir-lang   = { version = "=2.0.0-alpha.2", features = ["interp"] }
+# The bytecode path, for the differential against it (HIR -> LSB -> VM).
+bcgen-lang = "0.3"
+bvm-lang   = "=2.0.0-alpha.3"
 criterion = { version = "0.5", features = ["html_reports"] }
 proptest  = "1"
 
@@ -66,6 +80,13 @@ proptest  = "1"
 [[bench]]
 name    = "bench"
 harness = false
+
+
+# EXAMPLES
+# #################################
+[[example]]
+name = "lower"
+path = "examples/lower.rs"
 
 
 # RELEASE PROFILE
