@@ -403,7 +403,7 @@ fn collect<L: Lookup>(
             }
             ItemKind::Impl(_) | ItemKind::Class(_) | ItemKind::Interface(_) => {
                 // Members are reached through methods and associated paths,
-                // which 0.2 refuses; record them so a direct use says why.
+                // which this release refuses; record them so a direct use says why.
                 let members = match item.kind {
                     ItemKind::Impl(d) => d.items,
                     ItemKind::Class(d) => d.items,

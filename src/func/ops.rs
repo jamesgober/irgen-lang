@@ -197,12 +197,6 @@ impl<L: Lookup> FnCx<'_, '_, '_, L> {
             } else {
                 Policy::NONE
             };
-            if bop == BinaryOp::Pow
-                && aty.is_signed_int()
-                && p.overflow == Some(ir_lang::Overflow::Trap)
-            {
-                self.negative_exponent_guard(b, aty)?;
-            }
             return self.emit_op(
                 InstData::Binary {
                     op: bop,
@@ -283,21 +277,6 @@ impl<L: Lookup> FnCx<'_, '_, '_, L> {
             OpKind::CharFromU32 => self.convert(ConvOp::CharFromU32, Policy::NONE, a, Type::U32),
             _ => Err(bad()),
         }
-    }
-
-    /// OPS v2 makes a negative exponent `NegativeExponent` (E0006) under
-    /// every overflow policy but `promote`, `trap` included; ir-lang's `pow`
-    /// traps on it under `trap` (IR.md §4). Raise the error before the
-    /// operation, so the native tier agrees with the others.
-    fn negative_exponent_guard(&mut self, e: Value, ty: Type) -> Result<(), LowerError> {
-        let zero = self.b.iconst(ty, 0)?;
-        let neg = self.b.compare(CmpOp::Lt, e, zero)?;
-        let raise = self.new_block()?;
-        let cont = self.new_block()?;
-        self.branch(neg, raise, cont)?;
-        self.enter_sealed(raise)?;
-        self.raise_const(ir_lang::OpError::NegativeExponent.code())?;
-        self.enter_sealed(cont)
     }
 
     fn convert(&mut self, op: ConvOp, p: Policy, a: Value, to: Type) -> Result<Value, LowerError> {

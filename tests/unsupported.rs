@@ -1,4 +1,4 @@
-//! Every construct outside the 0.2 subset is refused with the
+//! Every construct outside the lowered subset is refused with the
 //! `Construct` that names it, at the node that uses it (never a panic and
 //! never a silently wrong module).
 

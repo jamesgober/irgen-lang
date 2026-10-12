@@ -5,9 +5,9 @@ use core::fmt;
 use hir_lang::{ItemId, NodeRef, Span};
 use ir_lang::{BuildError, ModuleError, ValidationError};
 
-/// A construct outside the subset irgen-lang 0.2 lowers.
+/// A construct outside the subset irgen-lang lowers.
 ///
-/// 0.2 lowers the **static-explicit subset**: non-generic functions over
+/// 0.3 lowers (as 0.2 did) the **static-explicit subset**: non-generic functions over
 /// scalars, records, tuples, and fixed-length arrays, with the control flow,
 /// operations, calls, and exceptions of HIR. Every other form is refused with
 /// the variant naming it, at the first node (in HIR's canonical order) that
@@ -87,7 +87,7 @@ pub enum Construct {
     RecursiveType,
     /// A function `abi` other than `C`, `sysv64`, `win64`, or `aapcs64`.
     Abi,
-    /// A pattern form 0.2 does not test: slices, references, by-reference
+    /// A pattern form this release does not test: slices, references, by-reference
     /// bindings, a type test outside a `catch` arm.
     Pattern,
     /// A `catch` arm that binds a thrown value without testing its type
@@ -258,7 +258,7 @@ pub enum LowerError {
         /// How many error diagnostics typeck-lang reported.
         count: usize,
     },
-    /// A construct outside the static subset 0.2 lowers.
+    /// A construct outside the static subset this release lowers.
     Unsupported {
         /// What it is.
         construct: Construct,
@@ -319,7 +319,7 @@ impl fmt::Display for LowerError {
                 span,
             } => write!(
                 f,
-                "{construct} at {node:?} ({}..{}) is outside the subset irgen-lang 0.2 lowers",
+                "{construct} at {node:?} ({}..{}) is outside the subset irgen-lang lowers",
                 span.start(),
                 span.end()
             ),

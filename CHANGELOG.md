@@ -21,6 +21,65 @@
 
 ---
 
+## [0.3.0] - 2026-10-12
+
+The first native compile (ISSUES P37): HIR lowered by irgen-lang, optimized by
+opt-lang 0.3, compiled by backend-lang 0.4 to x86-64 machine code, and run on
+the processor, every stage the family's own. The public API is unchanged; the
+ir-lang pin moves to `=2.0.0-alpha.3`, whose `Module` `Lowered` returns, so
+this is a minor release.
+
+### Added
+
+- **The native end-to-end test** (`tests/native.rs`): generated programs (the
+  generator with floats off) and hand-written ones (recursive `fib`, loops
+  with `break`/`continue`, integer `pow` under every overflow policy, float
+  `pow` through the runtime, records and arrays with bounds checks,
+  exceptions unwinding across native frames with `finally` and `defer`, a
+  host function that throws with a GC reference live, values live across an
+  unwinding call, OPS division and shift policies) are lowered, optimized,
+  compiled under the SysV and Win64 conventions with and without a frame
+  pointer, and run in this process; each outcome (result, thrown value or
+  run-time error, trap code, host trace) is compared with ir-lang's
+  interpreter on the lowered and the optimized module and with the
+  independent HIR evaluator, in both error modes. A long run behind
+  `--ignored`: 3,000 programs, 24,000 native runs, no disagreement.
+- The test's loader (`tests/common/native.rs`, test support): executable
+  memory through `mmap`/`VirtualAlloc`, relocations, an entry thunk, a trap
+  handler, host functions behind convention-adapting veneers that can unwind,
+  the float `pow` runtime bound to `ir_lang::ls_pow`, and a native unwinder
+  over backend-lang's landing-pad records and frame layouts (backend-lang 0.4
+  emits no unwind tables).
+- `examples/native.rs`: the pipeline end to end, `fib(30)` run natively and
+  against the interpreter.
+- Benchmarks `checked_chain_5k` and `checked_chain_20k`: one function of
+  checked additions, the shape ir-lang alpha.3's validator handles in
+  quadratic time (ISSUES P43).
+- Dev-dependencies `opt-lang` 0.3, `backend-lang` 0.4, `isa-lang` 0.2.
+
+### Changed
+
+- **`ir-lang` `=2.0.0-alpha.2` to `=2.0.0-alpha.3`** (both the dependency and
+  the `interp` dev-dependency).
+- A signed integer `pow` under `overflow = trap` is now a plain `check` (ir-lang
+  alpha.3 makes it fallible, ISSUES P36): the 0.2 pre-test of the exponent
+  (a compare, a branch, and a raise before the operation) is gone. Behaviour is
+  unchanged: a negative exponent is `NegativeExponent` (code 6) as an error or,
+  under `ErrorMode::Trap`, a trap with 6. Verified by the long differential
+  runs (20,000 programs against the reference evaluator, 10,000 against the
+  bytecode path, no disagreement) and the native test.
+- `Unsupported`'s message and the `Construct` docs no longer name a release
+  ("outside the subset irgen-lang lowers").
+
+### Fixed
+
+- The README's "linear time" guarantee is stated precisely: lowering is
+  linear, but the validation `lower` ends with is quadratic on a long chain of
+  `check`s in one function (ir-lang's validator, ISSUES P43; the same in 0.2).
+  The numbers are in the README's Performance section.
+
+---
+
 ## [0.2.0] - 2026-10-12
 
 The foundation: the static-explicit subset of HIR (hir-lang 0.4, typed by
@@ -104,6 +163,7 @@ Initial scaffold and repository bootstrap. No domain logic yet &mdash; this rele
 - `.github/workflows/ci.yml` CI matrix; `deny.toml`, `clippy.toml`, `rustfmt.toml`.
 - `dev/DIRECTIVES.md` and `dev/ROADMAP.md` (committed engineering standards + plan).
 
-[Unreleased]: https://github.com/jamesgober/irgen-lang/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jamesgober/irgen-lang/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jamesgober/irgen-lang/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jamesgober/irgen-lang/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jamesgober/irgen-lang/releases/tag/v0.1.0

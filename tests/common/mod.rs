@@ -3,6 +3,8 @@
 
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used)]
 
+#[cfg(all(target_arch = "x86_64", any(target_os = "linux", windows)))]
+pub mod native;
 pub mod progs;
 pub mod reference;
 

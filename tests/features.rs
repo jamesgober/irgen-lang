@@ -1368,8 +1368,10 @@ fn test_unused_items_and_options() {
 #[test]
 fn test_negative_exponent_under_trap_is_the_ops_error() {
     // OPS v2: `pow` with a negative exponent is NegativeExponent (E0006) under
-    // every overflow policy but promote, `trap` included (ir-lang's own `pow`
-    // would trap; irgen-lang raises the error first).
+    // every overflow policy but promote, `trap` included. ir-lang
+    // 2.0.0-alpha.3 makes a signed `pow<overflow=trap>` fallible, so it is a
+    // `check` and the error edge carries code 6 (ISSUES P36); irgen-lang no
+    // longer tests the exponent itself.
     let mut h = Hb::new();
     let _ = func1(
         &mut h,
@@ -1386,6 +1388,11 @@ fn test_negative_exponent_under_trap_is_the_ops_error() {
         },
     );
     let u = h.finish();
+    let typed = u.check();
+    let text = u.lower(&typed).module().to_string();
+    assert!(text.contains("check pow<overflow=trap>"), "{text}");
+    // No pre-test of the exponent: the only comparison would be `lt`.
+    assert!(!text.contains(" lt "), "{text}");
     assert_eq!(u.run("f", &[Val::i64(2), Val::i64(-1)]), error(6));
     assert_eq!(
         u.run_mode("f", &[Val::i64(2), Val::i64(-1)], ErrorMode::Trap),

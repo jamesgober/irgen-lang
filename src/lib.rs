@@ -50,7 +50,7 @@
 //! `ArithOverflow`, so it lowers to a `check` terminator whose error edge
 //! raises the error as an exception ([`ErrorMode`]).
 //!
-//! ## What it lowers (0.2)
+//! ## What it lowers
 //!
 //! The **static-explicit subset**: non-generic functions and module bodies;
 //! locals as SSA values (ir-lang's variable construction); blocks, labels,
@@ -70,6 +70,16 @@
 //! Anything else (dynamic values, closures, generics, coroutines, sum
 //! types, methods, strings, references) is a [`LowerError::Unsupported`]
 //! naming the [`Construct`] and the first node that uses it.
+//!
+//! ## The native path
+//!
+//! The lowered module is what opt-lang optimizes and backend-lang compiles to
+//! x86-64 machine code. The crate's native end-to-end test lowers HIR
+//! programs, optimizes them, compiles them, and runs the machine code on the
+//! processor (x86-64 Linux and Windows), comparing every outcome with
+//! ir-lang's interpreter and an independent HIR evaluator;
+//! `examples/native.rs` shows the pipeline. opt-lang and backend-lang are
+//! dev-dependencies only: this crate's output is the ir-lang module.
 //!
 //! ## Guarantees
 //!
@@ -127,7 +137,7 @@ pub use output::{Lowered, Stats};
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]
 #[doc = include_str!("../docs/API.md")]
-#[doc = include_str!("../docs/release/v0.2.0.md")]
+#[doc = include_str!("../docs/release/v0.3.0.md")]
 pub struct MarkdownDocTests;
 
 use hir_lang::Hir;

@@ -91,10 +91,100 @@ Found while building (for the ledger; not a change to another crate):
   raises the error, so the native path agrees with the bytecode path; the
   bytecode differential found it.
 
+## v0.3.0 - First native compile (DONE, 2026-10-12)
+- [x] Move to ir-lang `=2.0.0-alpha.3` (ISSUES P36 fixed there) and drop the 0.2 pre-test of `pow` exponents; behaviour identical, verified by the differentials.
+- [x] The native end-to-end test moved from 0.2 (ISSUES P37): HIR -> irgen-lang -> opt-lang -> backend-lang -> x86-64 machine code -> run, compared with ir-lang's interpreter and the reference evaluator.
+- [x] ISSUES P43 measured on irgen-lang's output and recorded.
+
+Delivered:
+- `ir-lang = "=2.0.0-alpha.3"` (dependency and `interp` dev-dependency). A
+  signed `pow<overflow=trap>` is now a plain `check` (alpha.3's
+  `can_error`); the exponent pre-test (`negative_exponent_guard`) is removed.
+  Re-verified: 20,000 programs against the reference evaluator and 10,000
+  against the bytecode path (the `--ignored` long runs), 0 disagreements; the
+  feature test pins the new IR shape (a `check pow<overflow=trap>`, no
+  compare) and the outcomes (error 6, trap 6 in trap mode, trap 1 on
+  overflow).
+- `tests/native.rs` and its loader `tests/common/native.rs` (x86-64 Linux and
+  Windows, in memory): an isa-lang-assembled entry thunk (SysV or Win64
+  callee), a trap handler, host functions behind veneers that adapt the
+  convention and can unwind, the float `pow` runtime bound to
+  `ir_lang::ls_pow` on bit patterns, and a native unwinder over
+  backend-lang's landing-pad records and frame layouts.
+- Programs run natively: the generator's programs with floats off (GC
+  references in every other program) in a 150-program sweep, a 20-program
+  sweep of larger programs, and a 3,000-program long run (24,000 native runs:
+  15,692 returned, 5,072 threw, 3,236 trapped, 0 disagreements); and
+  hand-written programs: recursive `fib` (to 25), loops with `break` and
+  `continue`, integer `pow` under `error`/`wrap`/`trap`, float `pow` through
+  `__lexersketch_pow_f64`, records passed by address and returned through the
+  hidden pointer with array writes and bounds checks, exceptions and run-time
+  errors unwinding through two native frames into `catch` with `finally` and
+  `defer`, a throwing host function with a live GC reference, many values
+  live across an unwinding call (catches an unwinder that does not restore
+  callee-saved registers), and OPS division and shift policies. Each in both
+  error modes, lowered and optimized, SysV and Win64, with and without a
+  frame pointer, against the interpreter (lowered and optimized module) and
+  the reference evaluator, host trace included. Mutation checks: an unwinder
+  that skips restoring saved registers, a wrong `pow` runtime, and a corrupted
+  trace are each caught.
+- `examples/native.rs`: `fib(30)` built as HIR, lowered, optimized, compiled
+  for the host convention, run natively, and checked against the interpreter.
+- Benchmarks `checked_chain_5k`/`checked_chain_20k`; the README's linear-time
+  claim narrowed to lowering itself (see P43 below).
+
+Dependency wiring (decided here, recorded per the anti-deferral rule):
+- **ir-lang `=2.0.0-alpha.3`: wired, pinned exactly.** Unchanged use of the
+  builder, variable construction, statepoints, `can_error`, compaction, the
+  validator.
+- **opt-lang 0.3, backend-lang 0.4, isa-lang 0.2: dev-dependencies** for the
+  native test and example (backend-lang's results are machine code and
+  relocations; isa-lang assembles the test's thunk, unwinder entry, and host
+  veneers). Not runtime dependencies: this crate's output is the ir-lang
+  module, and the native path stays the caller's to assemble (LexerSketch's
+  driver). object-lang is not needed: the test loads code in memory rather
+  than writing an ELF, which also makes it run on Windows.
+- **hir-lang 0.4, typeck-lang 0.3, intern-lang 1, bcgen-lang 0.3, bvm-lang
+  `=2.0.0-alpha.3`:** unchanged.
+
+Not run natively, and why (not deferred work of this crate):
+- Float arithmetic other than `pow`, float comparisons, int/float
+  conversions, and float arguments and results: backend-lang 0.4 refuses them
+  until isa-lang has SSE (ISSUES P11). The generator runs natively with floats
+  off; float `pow` is reached through `bitcast`.
+- Moving collection: the test's host objects never move, so stack maps are
+  exercised (spills and reloads around safepoints) but relocation is not;
+  backend-lang's own stack-map tests run a moving collector.
+- A system unwinder: backend-lang 0.4 emits no unwind tables; the test's
+  unwinder reads backend-lang's records directly.
+
+ISSUES P43 on irgen-lang's output (measured, not reshaped):
+- Shape: one function holding a chain of `check`s (operations that can raise
+  under the default policies) whose error edges all join the function's (or a
+  `try` region's) one error block. ir-lang alpha.3's dominator computation
+  walks the chain once per joining edge.
+- Release, x86-64 Windows, one function of `x = x + k` (checked): `lower`
+  2,500 checks 9 ms; 5,000 30 ms; 10,000 106 ms; 20,000 400 ms; 40,000
+  1.56 s, of which the final validation 1.50 s (irgen-lang's own work about
+  50 ms). On the same 40,000-check module opt-lang takes 1.63 s and
+  backend-lang 1.28 s, each dominated by its own input validation. Criterion:
+  `checked_chain_5k` 31.6 ms, `checked_chain_20k` 422 ms (13x for 4x).
+- Not hit by the 100k/1M benches: `generated_100k` 54.3 ms (0.2.0 on the
+  same machine back to back: 56.9 ms), `straight_100k` 14.4 ms (15.6 ms),
+  `generated_1m` 543 ms, `straight_1m` 163 ms. Their functions are small or
+  their arithmetic wraps.
+- Why irgen-lang does not reshape: forwarding blocks per group of checks only
+  divide the cost by the group size (the walk still climbs the chain), and
+  opt-lang's `SimplifyCfg` threads edges through such empty blocks back into
+  the one join before backend-lang validates again; one error block per
+  `check` with no join would duplicate the raise sequence (allocator call and
+  `resume`, or the trap switch) at every operation. The fix belongs in
+  ir-lang's validator (P43, alpha.4); irgen-lang's numbers will be re-measured
+  when it moves.
+
 ## v0.5.0 - Implementation
 - [ ] Monomorphization from typeck's plan, closure conversion, match-lang decision trees, dynamic values for mixed profiles, coroutines as state machines.
 - [ ] The forms 0.2 refuses that a Kraken subset and Zero need (each a `Construct` today): methods and associated items (static dispatch through typeck's `method`/`path_def`), sum types (with the decision trees above), references and pointers (address-taken locals in slots), strings and slices (with rt-lang), function values and indirect calls, named arguments and defaults, function statics, atomics and volatile intrinsics (1:1 to ir-lang), inline assembly (through isa-lang's assembler), nullable types. Union records, structural records, dynamic access, and `global` statements stay refused unless a target language needs them.
-- [ ] The native end-to-end test (moved from 0.2, see above).
 
 ## v0.9.0 - Hardening
 - [ ] Differential fuzzing across all tiers; compile-speed benchmarks.

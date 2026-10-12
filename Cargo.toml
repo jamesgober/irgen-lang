@@ -3,7 +3,7 @@
 # =============================================================================
 [package]
 name    = "irgen-lang"
-version = "0.2.0"
+version = "0.3.0"
 
 # Minimum Supported Rust Version (MSRV)
 rust-version = "1.85"
@@ -55,7 +55,7 @@ std = ["hir-lang/std", "ir-lang/std", "typeck-lang/std", "intern-lang/std"]
 hir-lang    = { version = "0.4", default-features = false }
 # ir-lang 2.0, the output: SSA builder, SSA construction, statepoint insertion, validator.
 # Pre-release, so pinned exactly (a later alpha may change the surface).
-ir-lang     = { version = "=2.0.0-alpha.2", default-features = false }
+ir-lang     = { version = "=2.0.0-alpha.3", default-features = false }
 # Types of every expression and binder (typeck-lang's side table).
 typeck-lang = { version = "0.3", default-features = false }
 # Symbol text for function and global names, through the interner's read
@@ -67,10 +67,18 @@ intern-lang = { version = "1", default-features = false }
 # #################################
 [dev-dependencies]
 # The reference interpreter (the oracle for differential tests).
-ir-lang   = { version = "=2.0.0-alpha.2", features = ["interp"] }
+ir-lang   = { version = "=2.0.0-alpha.3", features = ["interp"] }
 # The bytecode path, for the differential against it (HIR -> LSB -> VM).
 bcgen-lang = "0.3"
 bvm-lang   = "=2.0.0-alpha.3"
+# The native path, for the end-to-end test (HIR -> ir-lang -> opt-lang ->
+# backend-lang -> x86-64 machine code, run in this process): the optimizer,
+# the backend (instruction selection, register allocation, emission), and
+# isa-lang's assembler for the test's entry thunk and unwinder stubs. All on
+# ir-lang 2.0.0-alpha.3, so one build holds one 2.0 pre-release.
+opt-lang     = "0.3"
+backend-lang = "0.4"
+isa-lang     = "0.2"
 criterion = { version = "0.5", features = ["html_reports"] }
 proptest  = "1"
 
@@ -87,6 +95,10 @@ harness = false
 [[example]]
 name = "lower"
 path = "examples/lower.rs"
+
+[[example]]
+name = "native"
+path = "examples/native.rs"
 
 
 # RELEASE PROFILE

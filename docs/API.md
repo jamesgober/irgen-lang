@@ -1,7 +1,7 @@
 # irgen-lang &mdash; API Reference
 
-> Complete reference for every public item in `irgen-lang` 0.2.0, with examples.
-> **Status: pre-1.0 (0.2.0, the foundation).** The surface may change before
+> Complete reference for every public item in `irgen-lang` 0.3.0, with examples.
+> **Status: pre-1.0 (0.3.0, the first native compile).** The surface may change before
 > `1.0.0`, which comes after a Kraken subset and Zero compile natively through
 > it (LexerSketch decision D18). See [`../dev/ROADMAP.md`](../dev/ROADMAP.md).
 > The normative definitions are the LexerSketch specs `specs/HIR.md` (the
@@ -27,6 +27,7 @@
   - [GC references and statepoints](#gc-references-and-statepoints)
   - [Globals and constants](#globals-and-constants)
   - [Budgets and determinism](#budgets-and-determinism)
+  - [Running natively](#running-natively)
 - [`lower`](#lower)
 - [`Lowerer`](#lowerer)
 - [`Options`](#options)
@@ -57,11 +58,14 @@
 
 ```toml
 [dependencies]
-irgen-lang = "0.2"
+irgen-lang = "0.3"
 hir-lang = "0.4"        # the input
 typeck-lang = "0.3"     # its types
 intern-lang = "1"       # names
-ir-lang = "=2.0.0-alpha.2"   # the output (add features = ["interp"] to run it)
+ir-lang = "=2.0.0-alpha.3"   # the output (add features = ["interp"] to run it)
+# The native path (not dependencies of irgen-lang; add them to compile its output):
+opt-lang = "0.3"        # optimization
+backend-lang = "0.4"    # x86-64 machine code
 ```
 
 ## Quick start
@@ -97,15 +101,14 @@ lower-lang -> resolve-lang -> typeck-lang -> irgen-lang -> ir-lang 2.0 -> opt-la
 ```
 
 The bytecode path (bcgen-lang to bvm-lang) starts from the same HIR; the
-differential tests run both. Not connected yet: opt-lang 0.2 and backend-lang
-0.3 are built on ir-lang `=2.0.0-alpha.1`, this crate on `=2.0.0-alpha.2`, and
-Cargo resolves one 2.0 pre-release per build, so a native compile of
-irgen-lang's output waits for those crates to move to alpha.2 (recorded in the
-roadmap).
+differential tests run both. The native path is connected and tested end to
+end: opt-lang 0.3 and backend-lang 0.4 are on ir-lang `=2.0.0-alpha.3`, as
+this crate is, and the native test compiles lowered programs to x86-64 machine
+code and runs them (see [Running natively](#running-natively)).
 
 ### The subset
 
-0.2 lowers HIR checked under typeck-lang's **static disciplines**
+0.3 lowers (as 0.2 did) HIR checked under typeck-lang's **static disciplines**
 (`StaticExplicit`, `StaticInferred`):
 
 - non-generic functions (top-level, nested in modules or in blocks), module
@@ -177,7 +180,7 @@ Each HIR operation becomes one ir-lang instruction carrying **exactly** the
 policy fields ir-lang requires for the operand type (a float operation's
 `overflow` field is dropped: IEEE operations consult none). An operation that
 can raise an error (ir-lang's `can_error`, which depends on the operand type)
-is the operation of a `check` terminator. Two adjustments keep the native tier
+is the operation of a `check` terminator. One adjustment keeps the native tier
 equal to OPS:
 
 - **Shift amounts of another type.** HIR shifts by an amount of any integer
@@ -185,10 +188,12 @@ equal to OPS:
   its low bits (`mask`), clamped to the width or to `-1` so the policy sees
   the same case (`error`, `saturate`), and a negative amount under
   `saturate` on an unsigned operand raises `ShiftOutOfRange` explicitly.
-- **Negative exponents under `trap`.** OPS v2 makes integer `pow` with a
-  negative exponent `NegativeExponent` (E0006) under every overflow policy
-  but `promote`; ir-lang's `pow<overflow=trap>` traps instead (IR.md §4).
-  irgen-lang tests the exponent first and raises the error.
+
+Integer `pow` with a negative exponent is `NegativeExponent` (E0006) under
+every overflow policy but `promote`, `trap` included (OPS v2). ir-lang
+2.0.0-alpha.3 agrees (ISSUES P36): a signed `pow<overflow=trap>` can fail, so
+it is a `check` like any other fallible operation, and its error edge carries
+code 6. (0.2, on alpha.2, tested the exponent itself before the operation.)
 
 `promote` is refused (it needs dynamic values).
 
@@ -246,6 +251,74 @@ and constant evaluation are iterative too. Steps (HIR nodes lowered, each
 inlined constant once per use), the total bytes of global initializers, stack
 slot sizes, and statepoint work are capped ([`Limit`](#limit)). Every table is
 ordered, so the same unit lowers to the same module.
+
+Lowering itself is linear in the unit. The one validation `lower` ends with is
+ir-lang's, and ir-lang 2.0.0-alpha.3's validator is quadratic on one shape
+irgen-lang produces: a function holding a long chain of `check`s whose error
+edges all join the function's (or a `try` region's) one error block (ISSUES
+P43). In release, one function of 20,000 checked additions lowers in about
+0.4 s and one of 40,000 in about 1.6 s, nearly all of it validation; opt-lang
+and backend-lang validate their input again. Programs of many small functions
+do not have the shape.
+
+### Running natively
+
+The lowered module is the input of opt-lang and backend-lang as it stands:
+
+```rust
+use hir_lang::{Builder, Name};
+use intern_lang::Interner;
+use typeck_lang::{check, Profile};
+
+// fn main() {}
+let mut names = Interner::new();
+let mut b = Builder::new();
+let body = b.block(&[], None);
+let main = b.func(Name::new(names.intern("main")), &[], body);
+let root = b.module(None, &[main]);
+let hir = b.finish(root)?;
+let typed = check(&hir, &Profile::static_explicit()).unwrap();
+
+let mut module = irgen_lang::lower(&hir, &typed, &names)?.into_module();
+opt_lang::optimize(&mut module)?;
+let compiled = backend_lang::compile(&module, &backend_lang::Options::win64())?;
+let main_fn = compiled.function("main").unwrap();
+assert!(main_fn.size() > 0);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+To run the code, a loader places it in executable memory, patches the
+relocations, and binds every import:
+
+| Import | From | What it must do |
+|---|---|---|
+| [`rt::EXCEPTION`](#rt) (`__irgen_exception`) | irgen-lang | Allocate an exception record (layout in [`rt`](#rt)); `nounwind`, `nogc`. |
+| `__lexersketch_trap` | backend-lang | End the run with the trap code (the first argument); never returns. |
+| `__lexersketch_resume` | backend-lang | Unwind with the payload (the first argument); never returns. |
+| `__lexersketch_pow_f64`, `__lexersketch_pow_f32` | backend-lang | `ir_lang::ls_pow` on bit patterns (backend-lang's API reference gives the convention). |
+| host (`extern`) functions | the program | As declared; a host function may unwind. |
+
+backend-lang 0.4 records each `invoke`'s landing pad and each function's frame
+layout but emits no unwind tables, so an exception that crosses a call needs
+an unwinder over those records: it restores the callee-saved registers each
+unwound frame saved and enters the landing pad with the payload in `rax`.
+The crate's native test carries such a loader and unwinder for x86-64 Linux and
+Windows (`tests/common/native.rs`), and `examples/native.rs` uses it.
+
+Verified natively (`tests/native.rs`): generated programs (every integer OPS
+operation and policy, conversions, control flow, `match`, calls, aggregates,
+globals, constants, exceptions across frames, `finally`, `defer`, host calls
+and host functions that throw, GC references across safepoints) and
+hand-written ones (recursion, loops, `pow` under every policy, float `pow`
+through the runtime, records and arrays, unwinding with many values live),
+in both error modes, before and after opt-lang, under SysV and Win64, against
+ir-lang's interpreter and an independent HIR evaluator.
+
+Not run natively, and why: float arithmetic other than `pow`, float
+comparisons and conversions, and float arguments and results, which
+backend-lang 0.4 refuses until isa-lang encodes SSE (ISSUES P11); objects that
+move (the test's host never collects, so stack maps are exercised but
+relocation is not; backend-lang's own tests run a moving collector).
 
 ## `lower`
 
@@ -430,7 +503,7 @@ assert_eq!((s.functions, s.relocations), (0, 0));
 | Variant | Meaning | What to do |
 |---|---|---|
 | `TypeErrors { count }` | typeck-lang reported errors. | Fix the program; typeck's diagnostics say what. |
-| `Unsupported { construct, node, span }` | A [construct](#construct) outside the 0.2 subset, at its first node. | Avoid it, or wait for the milestone that lowers it. |
+| `Unsupported { construct, node, span }` | A [construct](#construct) outside the lowered subset, at its first node. | Avoid it, or wait for the milestone that lowers it. |
 | `BudgetExceeded { limit }` | A [budget](#limit) ran out. | Raise it in [`Options`](#options), or reject the input. |
 | `ConstCycle { item }` | A constant's value refers to itself. | Fix the program. |
 | `MissingType { node }` | `typed` has no type for a node: it is not this HIR's check. | Pass the matching `Typed`. |
@@ -551,8 +624,9 @@ assert_eq!(rt::prim_of_tag(u32::from_le_bytes(record[..4].try_into().unwrap())),
 
 ## Stability
 
-0.2.0 is pre-1.0: the surface may change in 0.x minor releases, each change
+0.3.0 is pre-1.0: the surface may change in 0.x minor releases, each change
 recorded in [`CHANGELOG.md`](../CHANGELOG.md). Every public enum is
 `#[non_exhaustive]`; `Stats` is too, so new statistics are additive. The
-ir-lang dependency is pinned to `=2.0.0-alpha.2` because ir-lang's 2.0 surface
-may still change before 2.0.0. MSRV is 1.85.
+ir-lang dependency is pinned to `=2.0.0-alpha.3` because ir-lang's 2.0 surface
+may still change before 2.0.0; `Lowered::module` returns that version's
+`Module`, so moving the pin is a minor (breaking) release. MSRV is 1.85.

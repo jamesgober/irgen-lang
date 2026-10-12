@@ -136,6 +136,11 @@ pub struct Gen {
     /// Only `i64`, `bool`, and `f64`: the programs whose static semantics
     /// equal the dynamic profile's (for the bytecode-path differential).
     pub scalar: bool,
+    /// Float values and operations. Off for the native end-to-end test:
+    /// backend-lang 0.4 refuses float arithmetic, comparisons, and
+    /// int/float conversions (isa-lang has no SSE yet, ISSUES P11). With it
+    /// on, the generator draws exactly as it did in 0.2.
+    pub floats: bool,
 }
 
 /// A generated program: the unit, and the entry's arguments.
@@ -161,7 +166,24 @@ pub fn scalar_program(seed: u64, size: i64) -> Program {
     generate(seed, None, size, true)
 }
 
+/// A program the native backend accepts: no float values or operations,
+/// and GC references only if `objects`.
+pub fn native_program(seed: u64, size: i64, objects: bool) -> Program {
+    generate_with(seed, None, size, false, objects, false)
+}
+
 fn generate(seed: u64, fns: Option<u64>, size: i64, scalar: bool) -> Program {
+    generate_with(seed, fns, size, scalar, !scalar, true)
+}
+
+fn generate_with(
+    seed: u64,
+    fns: Option<u64>,
+    size: i64,
+    scalar: bool,
+    objects: bool,
+    floats: bool,
+) -> Program {
     let mut g = Gen {
         h: Hb::new(),
         r: Rng::new(seed),
@@ -172,8 +194,9 @@ fn generate(seed: u64, fns: Option<u64>, size: i64, scalar: bool) -> Program {
         fns: Vec::new(),
         ret: T::I64,
         budget: 0,
-        with_objects: !scalar,
+        with_objects: objects,
         scalar,
+        floats,
     };
     g.declarations();
     let n = fns.unwrap_or_else(|| 1 + g.r.below(3));
@@ -258,6 +281,9 @@ impl Gen {
             T::Point,
             T::Arr,
         ];
+        if !self.floats {
+            ts.retain(|&t| t != T::F64);
+        }
         if self.with_objects {
             ts.push(T::Obj);
         }
@@ -545,7 +571,11 @@ impl Gen {
             }
             9 if !self.scalar => {
                 // A cast from an integer, a float, or a bool.
-                let src = self.r.pick(&[T::I64, T::I32, T::U8, T::F64, T::Bool]);
+                let src = if self.floats {
+                    self.r.pick(&[T::I64, T::I32, T::U8, T::F64, T::Bool])
+                } else {
+                    self.r.pick(&[T::I64, T::I32, T::U8, T::Bool])
+                };
                 let a = self.expr(src, d - 1);
                 let ty = self.ty(t);
                 let o = self.overflow();
@@ -580,7 +610,7 @@ impl Gen {
                 self.h
                     .ext_call("obj_get", &[HostTy::Obj], HostTy::Prim(Prim::I64), &[go])
             }
-            19 if t == T::I64 => {
+            19 if t == T::I64 && self.floats => {
                 // f64 to i64 through a float-to-int conversion.
                 let a = self.expr(T::F64, d - 1);
                 let f = self.r.pick(&[FloatToInt::Saturate, FloatToInt::Error]);
@@ -639,7 +669,7 @@ impl Gen {
                 let b = self.expr(t, d - 1);
                 self.h.op(k, &[a, b])
             }
-            3 => {
+            3 if self.floats => {
                 let k = self
                     .r
                     .pick(&[OpKind::Eq, OpKind::Ne, OpKind::Lt, OpKind::Ge]);
