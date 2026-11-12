@@ -184,10 +184,10 @@ ISSUES P43 on irgen-lang's output (measured, not reshaped):
 
 ## v0.5.0 - Implementation
 - [ ] Monomorphization from typeck's plan, closure conversion, match-lang decision trees, dynamic values for mixed profiles, coroutines as state machines.
-- [ ] The forms 0.2 refuses that a Kraken subset and Zero need (each a `Construct` today): methods and associated items (static dispatch through typeck's `method`/`path_def`), sum types (with the decision trees above), references and pointers (address-taken locals in slots), strings and slices (with rt-lang), function values and indirect calls, named arguments and defaults, function statics, atomics and volatile intrinsics (1:1 to ir-lang), inline assembly (through isa-lang's assembler), nullable types. Union records, structural records, dynamic access, and `global` statements stay refused unless a target language needs them.
+- [ ] The forms 0.2 refuses that a static language subset and Zero need (each a `Construct` today): methods and associated items (static dispatch through typeck's `method`/`path_def`), sum types (with the decision trees above), references and pointers (address-taken locals in slots), strings and slices (with rt-lang), function values and indirect calls, named arguments and defaults, function statics, atomics and volatile intrinsics (1:1 to ir-lang), inline assembly (through isa-lang's assembler), nullable types. Union records, structural records, dynamic access, and `global` statements stay refused unless a target language needs them.
 
 ## v0.9.0 - Hardening
 - [ ] Differential fuzzing across all tiers; compile-speed benchmarks.
 
 ## v1.0.0 - Stable
-- [ ] Frozen after a Kraken subset and Zero compile natively through it (D18).
+- [ ] Frozen after a static language subset and Zero compile natively through it (D18).
