@@ -1,7 +1,6 @@
 # irgen-lang - Roadmap
 
 > Path from scaffold to a stable 1.0. Hard parts are front-loaded; each phase has hard exit criteria.
-> Master plan: C:/Dev/libraries/Rust/lang-collection/_lexersketch/ROADMAP.md and NEW-LIBS.md
 >
 > **Anti-deferral rule:** no listed hard task moves to a later phase unless this file records the move and the reason.
 
@@ -141,7 +140,7 @@ Dependency wiring (decided here, recorded per the anti-deferral rule):
   native test and example (backend-lang's results are machine code and
   relocations; isa-lang assembles the test's thunk, unwinder entry, and host
   veneers). Not runtime dependencies: this crate's output is the ir-lang
-  module, and the native path stays the caller's to assemble (LexerSketch's
+  module, and the native path stays the caller's to assemble (the toolchain's
   driver). object-lang is not needed: the test loads code in memory rather
   than writing an ELF, which also makes it run on Windows.
 - **hir-lang 0.4, typeck-lang 0.3, intern-lang 1, bcgen-lang 0.3, bvm-lang

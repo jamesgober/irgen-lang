@@ -3,8 +3,8 @@
 > Complete reference for every public item in `irgen-lang` 0.3.0, with examples.
 > **Status: pre-1.0 (0.3.0, the first native compile).** The surface may change before
 > `1.0.0`, which comes after a static language subset and Zero compile natively through
-> it (LexerSketch decision D18). See [`../dev/ROADMAP.md`](../dev/ROADMAP.md).
-> The normative definitions are the LexerSketch specs `specs/HIR.md` (the
+> it (decision D18). See [`../dev/ROADMAP.md`](../dev/ROADMAP.md).
+> The normative definitions are the toolchain's specs `specs/HIR.md` (the
 > input), `specs/IR.md` (the output), and `specs/OPS.md` (operation
 > semantics).
 
