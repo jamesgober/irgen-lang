@@ -1,6 +1,6 @@
 //! # irgen_lang
 //!
-//! Lowers HIR (the representation every LexerSketch language translates
+//! Lowers HIR (the representation every forged language translates
 //! into) to ir-lang 2.0 SSA, the input of the family's own native compiler
 //! path: irgen-lang, then opt-lang, then backend-lang's instruction
 //! selection and register allocation, then machine code and object files.

@@ -19,7 +19,7 @@ readme = "README.md"
 description = "Lowers HIR to ir-lang SSA for native compilation: functions, SSA locals, control flow, records and arrays in memory, OPS operations with their policies, exception edges, and GC statepoints."
 
 # Keywords (5 max)
-keywords = ["compiler", "ssa", "lowering", "hir", "lexersketch"]
+keywords = ["compiler", "ssa", "lowering", "hir"]
 
 # Categories
 categories = ["compilers", "no-std"]
